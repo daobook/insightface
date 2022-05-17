@@ -142,7 +142,7 @@ def _update_dict(k, v):
         if vk in config[k]:
             config[k][vk] = vv
         else:
-            raise ValueError("{}.{} not exist in config.py".format(k, vk))
+            raise ValueError(f"{k}.{vk} not exist in config.py")
 
 
 def update_config(config_file):
@@ -150,32 +150,39 @@ def update_config(config_file):
     with open(config_file) as f:
         exp_config = edict(yaml.load(f))
     for k, v in exp_config.items():
-        if k in config:
-            if isinstance(v, dict):
-                _update_dict(k, v)
-            else:
-                config[k] = v
+        if k not in config:
+            raise ValueError(f"{k} not exist in config.py")
+        if isinstance(v, dict):
+            _update_dict(k, v)
         else:
-            raise ValueError("{} not exist in config.py".format(k))
+            config[k] = v
     assert not config.TRAIN.USE_TEMP or not config.TRAIN.USE_NEW_TEMP, "Don't use both temporal methods"
     assert config.DATA.NUM_NEIGHBOUR_TUPLES <= config.DATA.NUM_NEIGHBOUR_FRAMES * (config.DATA.NUM_NEIGHBOUR_FRAMES - 1) // 2
 
 def update_dir(model_dir, log_dir, data_dir, debug):
     if model_dir:
         os.makedirs(model_dir, exist_ok=True)
-        config.OUTPUT_DIR = model_dir 
+        config.OUTPUT_DIR = model_dir
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(data_dir, exist_ok=True)
     config.LOG_DIR = log_dir
-    config.DATA_DIR = data_dir 
+    config.DATA_DIR = data_dir
     if config.DATA.DATASET_NAME == 'surreal': 
         config.DATA.TRAIN_PATH = osp.join(config.DATA_DIR, "surreal_train_pred3.h5")
         config.DATA.VALID_PATH = osp.join(config.DATA_DIR, "surreal_valid_pred3.h5")
     elif config.DATA.DATASET_NAME == "h36m":
         # config.DATA.TRAIN_PATH = osp.join(config.DATA_DIR, "../../unsupervised_mesh/data/h36m_train_pred_3d_mesh.h5" if not debug else "debug_train.h5")
         # config.DATA.VALID_PATH = osp.join(config.DATA_DIR, "../../unsupervised_mesh/data/h36m_valid_pred_3d_mesh.h5" if not debug else "debug_valid.h5")
-        config.DATA.TRAIN_PATH = osp.join(config.DATA_DIR, "h36m_train_pred3.h5" if not debug else "debug_train.h5")
-        config.DATA.VALID_PATH = osp.join(config.DATA_DIR, "h36m_valid_pred3.h5" if not debug else "debug_valid.h5")
+        config.DATA.TRAIN_PATH = osp.join(
+            config.DATA_DIR,
+            "debug_train.h5" if debug else "h36m_train_pred3.h5",
+        )
+
+        config.DATA.VALID_PATH = osp.join(
+            config.DATA_DIR,
+            "debug_valid.h5" if debug else "h36m_valid_pred3.h5",
+        )
+
     elif config.DATA.DATASET_NAME == 'mpi': 
         config.DATA.TRAIN_PATH = osp.join(config.DATA_DIR, "mpi_train_pred3.h5")
         config.DATA.VALID_PATH = osp.join(config.DATA_DIR, "mpi_valid_pred3.h5")

@@ -122,7 +122,7 @@ def main(args):
         arg_params, aux_params = model.get_params()
         vmodel.set_params(arg_params, aux_params)
         for target in config.val_targets:
-            _file = os.path.join(config.dataset_path, '%s.rec' % target)
+            _file = os.path.join(config.dataset_path, f'{target}.rec')
             if not os.path.exists(_file):
                 continue
             val_iter = FaceSegIter(
@@ -136,7 +136,7 @@ def main(args):
             val_metric = mx.metric.create(_metric)
             val_metric.reset()
             val_iter.reset()
-            for i, eval_batch in enumerate(val_iter):
+            for eval_batch in val_iter:
                 #print(eval_batch.data[0].shape, eval_batch.label[0].shape)
                 batch_data = mx.io.DataBatch(eval_batch.data)
                 model.forward(batch_data, is_train=False)

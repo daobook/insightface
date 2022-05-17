@@ -37,10 +37,8 @@ def rigid_align(predicted, target):
     a = tr * normX / normY  # Scale
     t = muX - a * np.matmul(muY, R)  # Translation
 
-    # Perform rigid transformation on the input
-    predicted_aligned = a * np.matmul(predicted, R) + t
     # Return MPJPE
-    return predicted_aligned
+    return a * np.matmul(predicted, R) + t
 
 
 def p_mpjpe(predicted, target, rot=True, trans=True, scale=True):
@@ -79,13 +77,9 @@ def p_mpjpe(predicted, target, rot=True, trans=True, scale=True):
     t = muX - a * np.matmul(muY, R)  # Translation
 
     # Perform rigid transformation on the input
-    if rot: 
-        predicted_aligned = np.matmul(predicted, R)
-    else: 
-        predicted_aligned = predicted
-
+    predicted_aligned = np.matmul(predicted, R) if rot else predicted
     if scale:
-        predicted_aligned = a * predicted_aligned 
+        predicted_aligned = a * predicted_aligned
     if trans: 
         predicted_aligned = predicted_aligned + t
     # predicted_aligned = a * np.matmul(predicted, R) + t
@@ -153,9 +147,8 @@ def euler2rotmat(eulers):
     matx = get_rotation_x(thetax)
     maty = get_rotation_y(thetay)
     matz = get_rotation_z(thetaz)
-    rotmat = matz.matmul(matx).matmul(maty)
     # rotmat = maty.matmul(matx).matmul(matz)
-    return rotmat
+    return matz.matmul(matx).matmul(maty)
 
 def rotate(joints_3d, eulers):
     rotmat = euler2rotmat(eulers)
@@ -177,10 +170,10 @@ def rotate2(joints_3d, rotmat):
 def transform_3d(inputs, rot_y, rot_x, is_reverse):
     # rot_y/rot_x: N x 1 
     root3d = inputs[:,13:14].clone() if inputs.shape[1] == 17 else inputs[:, 12:13]
-    outputs = inputs - root3d 
+    outputs = inputs - root3d
     rot_y_mat = get_rotation_y_v2(rot_y)
     rot_x_mat = get_rotation_x(rot_x)
-    rot_mat = rot_x_mat.bmm(rot_y_mat) if not is_reverse else rot_y_mat.bmm(rot_x_mat)
+    rot_mat = rot_y_mat.bmm(rot_x_mat) if is_reverse else rot_x_mat.bmm(rot_y_mat)
     # N x 3 x 3 , ((N x J x 3) -> (N x 3 x J)) -> N x 3 x J
     outputs = rot_mat.bmm(outputs.permute(0, 2, 1))
     outputs = outputs.permute(0, 2, 1)
@@ -195,23 +188,28 @@ def transform_3d_v2(inputs, rot_y, rot_x, shift, is_reverse, rot_z=None, use_new
         outputs = inputs - shift 
     else:
         root3d = inputs[:, 13:14].clone() if inputs.shape[1] == 17 else inputs[:, 12:13]
-        outputs = inputs - root3d 
+        outputs = inputs - root3d
     if use_new_rot: 
         rot_y_mat = get_rotation_y_v2(rot_y, is_mpi=is_mpi)
     else:
         rot_y_mat = get_rotation_y(rot_y)
     rot_x_mat = get_rotation_x(rot_x)
     if rot_z is None:
-        rot_mat = rot_x_mat.bmm(rot_y_mat) if not is_reverse else rot_y_mat.bmm(rot_x_mat)
+        rot_mat = rot_y_mat.bmm(rot_x_mat) if is_reverse else rot_x_mat.bmm(rot_y_mat)
     else: 
         rot_z_mat = get_rotation_z(rot_z)
-        rot_mat = rot_z_mat.bmm(rot_x_mat).bmm(rot_y_mat) if not is_reverse else rot_y_mat.bmm(rot_x_mat).bmm(rot_z_mat)
+        rot_mat = (
+            rot_y_mat.bmm(rot_x_mat).bmm(rot_z_mat)
+            if is_reverse
+            else rot_z_mat.bmm(rot_x_mat).bmm(rot_y_mat)
+        )
+
     # N x 3 x 3 , ((N x J x 3) -> (N x 3 x J)) -> N x 3 x J
     outputs = rot_mat.bmm(outputs.permute(0, 2, 1))
     outputs = outputs.permute(0, 2, 1)
     # add the shift instead of the root 
     if not is_reverse: 
-        outputs += shift 
+        outputs += shift
     return outputs
 
 
@@ -304,13 +302,12 @@ def load_checkpoint(model, optimizer, output_dir, filename='checkpoint.pth.tar')
         start_epoch = checkpoint['epoch']
         model.module.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
-        print('=> load checkpoint {} (epoch {})'
-              .format(file, start_epoch))
+        print(f'=> load checkpoint {file} (epoch {start_epoch})')
 
         return start_epoch, model, optimizer
 
     else:
-        print('=> no checkpoint found at {}'.format(file))
+        print(f'=> no checkpoint found at {file}')
         return 0, model, optimizer
 
 
@@ -366,8 +363,7 @@ def _scale_range(x, a, b):
     return (x - M)/(m - M)*(a - b) + b
 
 def calc_dists(joints_3d_pre, joints_3d_gt, head_size=300):
-    dists = 1000 / head_size * np.linalg.norm(joints_3d_pre - joints_3d_gt, axis=-1)
-    return dists
+    return 1000 / head_size * np.linalg.norm(joints_3d_pre - joints_3d_gt, axis=-1)
 
 def calc_pck3d(dists, threshold=0.5):
     n, c = dists.shape

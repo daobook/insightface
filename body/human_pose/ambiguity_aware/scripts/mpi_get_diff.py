@@ -1,5 +1,5 @@
-import numpy as np 
-import h5py 
+import numpy as np
+import h5py
 import argparse 
 
 np.random.seed(2019)
@@ -25,12 +25,15 @@ if use_random:
 if use_pre: 
     suffix += "_pre"
 
-in_filename = "../data/mpi_{}_pred3.h5".format("train" if is_train else "valid")
-out_filename = "../data/mpi_{}_diff{}.h5".format("train" if is_train else "valid", suffix)
+in_filename = f'../data/mpi_{"train" if is_train else "valid"}_pred3.h5'
+out_filename = (
+    f'../data/mpi_{"train" if is_train else "valid"}_diff{suffix}.h5'
+)
+
 
 f = h5py.File(in_filename, "r")
 names = [name.decode() for name in f['imagename'][:]]
-joints_2d = np.array(f['joint_2d_gt' if not use_pre else "joint_2d_pre"])
+joints_2d = np.array(f["joint_2d_pre" if use_pre else 'joint_2d_gt'])
 f.close()
 print("Load from", in_filename)
 
@@ -39,7 +42,7 @@ splits = [name.split('/') for name in names]
 sequences = ['/'.join(split[:4]) for split in splits]
 indices_ref = [int(split[-1].split(".")[0].split('_')[1]) for split in splits]
 indices = []
-i = 0 
+i = 0
 last_seqname = None
 for index, seqname in zip(indices_ref, sequences): 
     if last_seqname is not None and seqname != last_seqname: 
@@ -94,7 +97,7 @@ dist = np.linalg.norm((joints_2d - diff).reshape(size, -1), axis=1).mean()
 print("Mean distance bewteen diff and original: {:.3f}".format(dist))
 
 f = h5py.File(out_filename, "w")
-f['gt_diff'] = diff 
+f['gt_diff'] = diff
 # f['gt_diff_type'] = diff_types
 f.close()
 print("Saved to", out_filename)

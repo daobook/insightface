@@ -60,7 +60,7 @@ def parse_args():
 
 def reset_config(config, args):
     if not config.USE_GT: 
-        config.USE_GT = True if args.use_gt else False
+        config.USE_GT = bool(args.use_gt)
     if args.gpu:
         config.GPU = args.gpu
     config.NUM_WORKERS = args.workers

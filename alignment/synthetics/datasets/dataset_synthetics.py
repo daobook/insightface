@@ -142,9 +142,11 @@ class FaceDataset(Dataset):
             t = self.transform(image=img, keypoints=label)
             flipped = False
             for trans in t["replay"]["transforms"]:
-                if trans["__class_fullname__"].endswith('HorizontalFlip'):
-                    if trans["applied"]:
-                        flipped = True
+                if (
+                    trans["__class_fullname__"].endswith('HorizontalFlip')
+                    and trans["applied"]
+                ):
+                    flipped = True
             img = t['image']
             label = t['keypoints']
             label = np.array(label, dtype=np.float32)

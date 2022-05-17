@@ -34,9 +34,16 @@ class SimpleDiscriminator(nn.Module):
         if self.use_spectral_norm: 
             self.w1 = nn.utils.spectral_norm(self.w1)
         self.batch_norm1 = nn.BatchNorm1d(self.linear_size)
-        self.linear_stages = []
-        for l in range(num_stage):
-            self.linear_stages.append(Linear(self.linear_size, self.p_dropout, spectral_norm=spectral_norm, use_bn=use_bn))
+        self.linear_stages = [
+            Linear(
+                self.linear_size,
+                self.p_dropout,
+                spectral_norm=spectral_norm,
+                use_bn=use_bn,
+            )
+            for _ in range(num_stage)
+        ]
+
         self.linear_stages = nn.ModuleList(self.linear_stages)
         self.out = nn.Linear(self.linear_size, 1)
         if self.use_spectral_norm: 
@@ -50,9 +57,7 @@ class SimpleDiscriminator(nn.Module):
             x = self.batch_norm1(x)
         for l in range(self.num_stage):
             x = self.linear_stages[l](x)
-        out = self.out(x)
-
-        return out 
+        return self.out(x) 
 
 
 class Discriminator(nn.Module): 
@@ -60,14 +65,19 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
         num_feats, num_xyz = 2, 3
         num_joints = cfg.DATA.NUM_JOINTS
-        num_channels = cfg.NETWORK.NUM_CHANNELS 
-        num_res_blocks = cfg.NETWORK.DIS_RES_BLOCKS if not is_temp else cfg.NETWORK.DIS_TEMP_RES_BLOCKS
-        dropout = cfg.NETWORK.DROPOUT 
+        num_channels = cfg.NETWORK.NUM_CHANNELS
+        num_res_blocks = (
+            cfg.NETWORK.DIS_TEMP_RES_BLOCKS
+            if is_temp
+            else cfg.NETWORK.DIS_RES_BLOCKS
+        )
+
+        dropout = cfg.NETWORK.DROPOUT
         use_bn = cfg.NETWORK.DIS_USE_BN
         # whether to use spectral normalization for the discriminator
         use_spectral_norm = cfg.NETWORK.DIS_USE_SPECTRAL_NORM
         bn_track = cfg.NETWORK.BN_TRACK
-        input_size = num_feats * num_joints if not is_temp else num_feats*2*num_joints
+        input_size = num_feats*2*num_joints if is_temp else num_feats * num_joints
         self.num_xyz = num_xyz
         self.num_res_blocks = num_res_blocks
         self.pre = nn.ModuleList()
@@ -77,7 +87,8 @@ class Discriminator(nn.Module):
             self.pre.append(nn.Linear(input_size, num_channels))
         if use_bn: 
             self.pre.append(nn.BatchNorm1d(num_channels, track_running_stats=bn_track))
-        self.pre.append(nn.ReLU(inplace=True)); self.pre.append(nn.Dropout(dropout))
+        self.pre.append(nn.ReLU(inplace=True))
+        self.pre.append(nn.Dropout(dropout))
         self.pre = nn.Sequential(*self.pre)
 
         self.blocks = nn.ModuleList()
@@ -94,8 +105,7 @@ class Discriminator(nn.Module):
         x = self.pre(joints_2d)
         for block in self.blocks:
             x = block(x, joints_2d)
-        out = self.out(x)
-        return out 
+        return self.out(x) 
 
 
 class PoseModel(nn.Module):
@@ -143,12 +153,16 @@ class PoseModel(nn.Module):
             return joints_3d[..., :2]
 
         if self.is_surreal: 
-            joints_2d = torch.clamp(joints_3d[..., :2] / joints_3d[..., 2:], min=-0.25, max=0.25)
+            return torch.clamp(
+                joints_3d[..., :2] / joints_3d[..., 2:], min=-0.25, max=0.25
+            )
+
         elif not self.is_mpi:
-            joints_2d = torch.clamp(joints_3d[..., :2] / joints_3d[..., 2:], min=-0.2, max=0.2)
+            return torch.clamp(joints_3d[..., :2] / joints_3d[..., 2:], min=-0.2, max=0.2)
         else:
-            joints_2d = torch.clamp(joints_3d[..., :2] / joints_3d[..., 2:], min=-0.35, max=0.35)
-        return joints_2d
+            return torch.clamp(
+                joints_3d[..., :2] / joints_3d[..., 2:], min=-0.35, max=0.35
+            )
 
     def _compute_3d(self, joints_2d, depths):
         # joints_2d: (N * J * 2), depths: (N * J * 1)
@@ -156,11 +170,11 @@ class PoseModel(nn.Module):
             depths = depths.unsqueeze(-1)
         ones = torch.ones_like(depths)
         depths = torch.max(ones, depths + self.c)
-        if self.is_generic_baseline:
-            joints_3d = torch.cat((joints_2d, depths), dim=-1)
-        else:
-            joints_3d = torch.cat((depths * joints_2d, depths), dim=-1)
-        return joints_3d
+        return (
+            torch.cat((joints_2d, depths), dim=-1)
+            if self.is_generic_baseline
+            else torch.cat((depths * joints_2d, depths), dim=-1)
+        )
 
     @staticmethod
     def _get_extra_info(joints_2d):
@@ -185,7 +199,10 @@ class PoseModel(nn.Module):
             elif self.scaler_input_size == 37:
                 scaler_inputs = torch.cat([joints_in.view(bs, -1), hs, ws, hws], dim=1)
             else: 
-                raise NotImplementedError("Can not recognize {} for scaler's input size".format(self.scaler_input_size))
+                raise NotImplementedError(
+                    f"Can not recognize {self.scaler_input_size} for scaler's input size"
+                )
+
             # output scales's shape shall be (N, 1)
             if self.learn_symmetry:
                 scale_mids = self.scaler(scaler_inputs)
@@ -196,12 +213,10 @@ class PoseModel(nn.Module):
             # multiply the 2d inputs 
             if not self.scale_on_3d:
                 joints_in = joints_in * scales.view(-1, 1, 1)
-            scaled_2d = None
         else: 
             scale_mids = None
-            scales = None 
-            scaled_2d = None
-
+            scales = None
+        scaled_2d = None
         if not is_train: 
             center_joints_in = joints_in
             out_features, out_joints_sc = [], []
