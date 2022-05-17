@@ -42,9 +42,7 @@ class Linear(nn.Module):
         y = self.relu(y)
         y = self.dropout(y)
 
-        out = x + y
-
-        return out
+        return x + y
 
 
 class LinearModelBefore(nn.Module):
@@ -67,9 +65,10 @@ class LinearModelBefore(nn.Module):
         self.w1 = nn.Linear(self.input_size, self.linear_size)
         self.batch_norm1 = nn.BatchNorm1d(self.linear_size)
 
-        self.linear_stages = []
-        for l in range(num_stage):
-            self.linear_stages.append(Linear(self.linear_size, self.p_dropout))
+        self.linear_stages = [
+            Linear(self.linear_size, self.p_dropout) for _ in range(num_stage)
+        ]
+
         self.linear_stages = nn.ModuleList(self.linear_stages)
 
         # post processing

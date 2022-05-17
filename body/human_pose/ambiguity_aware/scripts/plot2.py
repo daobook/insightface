@@ -117,8 +117,19 @@ def get_xxyys(names):
     # should be subject, action, camera
     splits = names[0].split('/')
     video_name = '/'.join(splits[:-1])
-    part_label_path = osp.join(root, splits[0], 'MySegmentsMat', 'PartLabels',
-                splits[1] + ("cam" + splits[2]).replace('cam0', '.54138969').replace('cam2','.58860488').replace('cam1', '.55011271').replace('cam3', '.60457274') + ".mat")
+    part_label_path = osp.join(
+        root,
+        splits[0],
+        'MySegmentsMat',
+        'PartLabels',
+        splits[1]
+        + f"cam{splits[2]}".replace('cam0', '.54138969')
+        .replace('cam2', '.58860488')
+        .replace('cam1', '.55011271')
+        .replace('cam3', '.60457274')
+        + ".mat",
+    )
+
     f = h5py.File(part_label_path, "r")
     for idx, name in enumerate(names): 
         partmask = f[f['Feat'][idx*30, 0]][()].T 
@@ -199,7 +210,7 @@ for imageid in t:
 
     def update_video(frame_idx):
         global initialized, lines_3d, lines_3d_gt, lines_3d_ssadv
-        print("{}/{} ".format(frame_idx, num_render), end='\r')
+        print(f"{frame_idx}/{num_render} ", end='\r')
         scale = scales_in_video[frame_idx].item()
         pose2d = poses2d_in_video[frame_idx]
         pose3d = poses3d_in_video[frame_idx]
@@ -218,7 +229,7 @@ for imageid in t:
         ax.plot_surface(zz, xx, yy, rstride=1, cstride=1, facecolors=all_frames[frame_idx], shade=False)
 
         if not initialized:
-            for idx, pair in enumerate(pairs):
+            for pair in pairs:
                 i, j = pair
                 if pair in pairs_left: 
                     color = "blue"
@@ -230,14 +241,6 @@ for imageid in t:
                 x11, y11, z11 = pt1
                 x22, y22, z22 = pt2
                 lines_3d.append(ax.plot([z11, z22], [x11, x22], [-y11, -y22], c=color, linewidth=3, label="pre"))
-                # pt1, pt2 = pose3d_gt[i], pose3d_gt[j]
-                # x11, y11, z11 = pt1 
-                # x22, y22, z22 = pt2 
-                # lines_3d_gt.append(ax.plot([z11, z22], [x11, x22], [-y11, -y22], c="green", linewidth=3, label="gt"))
-                # pt1, pt2 = pose3d_ssadv[i], pose3d_ssadv[j]
-                # x11, y11, z11 = pt1 
-                # x22, y22, z22 = pt2
-                # lines_3d_ssadv.append(ax.plot([z11, z22], [x11, x22], [-y11, -y22], c="red", linewidth=3, label="ssadv"))
             initialized = True
         else:
             for idx, pair in enumerate(pairs):

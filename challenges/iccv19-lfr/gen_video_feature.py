@@ -61,13 +61,13 @@ def get_feature(buffer):
     db = mx.io.DataBatch(data=(data, ))
     net.model.forward(db, is_train=False)
     _embedding = net.model.get_outputs()[0].asnumpy()
-    _embedding = _embedding[0:input_count]
+    _embedding = _embedding[:input_count]
     if emb_size == 0:
         emb_size = _embedding.shape[1]
         print('set emb_size to ', emb_size)
     embedding = np.zeros((len(buffer), emb_size), dtype=np.float32)
     if use_flip:
-        embedding1 = _embedding[0::2]
+        embedding1 = _embedding[::2]
         embedding2 = _embedding[1::2]
         embedding = embedding1 + embedding2
     else:
@@ -89,12 +89,11 @@ def main(args):
     global ctx_num
 
     print(args)
-    ctx = []
     cvd = os.environ['CUDA_VISIBLE_DEVICES'].strip()
+    ctx = []
     if len(cvd) > 0:
-        for i in range(len(cvd.split(','))):
-            ctx.append(mx.gpu(i))
-    if len(ctx) == 0:
+        ctx.extend(mx.gpu(i) for i in range(len(cvd.split(','))))
+    if not ctx:
         ctx = [mx.cpu()]
         print('use cpu')
     else:
@@ -120,29 +119,25 @@ def main(args):
                                           image_shape[2]))])
     net.model.set_params(net.arg_params, net.aux_params)
 
-    features_all = None
-
-    i = 0
     filelist = os.path.join(args.input, 'filelist.txt')
     #print(filelist)
     buffer_images = []
     buffer_embedding = np.zeros((0, 0), dtype=np.float32)
     aggr_nums = []
     row_idx = 0
-    for line in open(filelist, 'r'):
+    features_all = None
+    for i, line in enumerate(open(filelist, 'r')):
         if i % 1000 == 0:
             print("processing ", i)
-        i += 1
         #print('stat', i, len(buffer_images), buffer_embedding.shape, aggr_nums, row_idx)
         videoname = line.strip().split()[0]
-        images = glob.glob("%s/%s/*.jpg" % (args.input, videoname))
+        images = glob.glob(f"{args.input}/{videoname}/*.jpg")
         assert len(images) > 0
         image_features = []
-        for image_path in images:
-            buffer_images.append(image_path)
+        buffer_images.extend(iter(images))
         aggr_nums.append(len(images))
         while len(buffer_images) >= args.batch_size:
-            embedding = get_feature(buffer_images[0:args.batch_size])
+            embedding = get_feature(buffer_images[:args.batch_size])
             buffer_images = buffer_images[args.batch_size:]
             if buffer_embedding.shape[1] == 0:
                 buffer_embedding = embedding.copy()
@@ -152,20 +147,19 @@ def main(args):
         buffer_idx = 0
         acount = 0
         for anum in aggr_nums:
-            if buffer_embedding.shape[0] >= anum + buffer_idx:
-                image_features = buffer_embedding[buffer_idx:buffer_idx + anum]
-                video_feature = np.sum(image_features, axis=0, keepdims=True)
-                video_feature = sklearn.preprocessing.normalize(video_feature)
-                if features_all is None:
-                    features_all = np.zeros(
-                        (data_size, video_feature.shape[1]), dtype=np.float32)
-                #print('write to', row_idx, anum, buffer_embedding.shape)
-                features_all[row_idx] = video_feature.flatten()
-                row_idx += 1
-                buffer_idx += anum
-                acount += 1
-            else:
+            if buffer_embedding.shape[0] < anum + buffer_idx:
                 break
+            image_features = buffer_embedding[buffer_idx:buffer_idx + anum]
+            video_feature = np.sum(image_features, axis=0, keepdims=True)
+            video_feature = sklearn.preprocessing.normalize(video_feature)
+            if features_all is None:
+                features_all = np.zeros(
+                    (data_size, video_feature.shape[1]), dtype=np.float32)
+            #print('write to', row_idx, anum, buffer_embedding.shape)
+            features_all[row_idx] = video_feature.flatten()
+            row_idx += 1
+            buffer_idx += anum
+            acount += 1
         aggr_nums = aggr_nums[acount:]
         buffer_embedding = buffer_embedding[buffer_idx:]
 
